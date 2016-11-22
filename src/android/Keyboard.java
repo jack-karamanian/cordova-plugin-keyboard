@@ -2,6 +2,12 @@ package org.apache.cordova.labs.keyboard;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Point;
+import android.graphics.Rect;
+import android.os.Build;
+import android.util.DisplayMetrics;
+import android.view.Display;
+import android.view.ViewTreeObserver;
 import android.view.inputmethod.InputMethodManager;
 import android.view.View;
 import org.apache.cordova.*;
@@ -9,9 +15,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 public class Keyboard extends CordovaPlugin {
+	private ViewTreeObserver.OnGlobalLayoutListener list;
+    private View rootView;
 
     @Override
-    public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
+    public boolean execute(String action, JSONArray args, final CallbackContext callbackContext) throws JSONException {
 	Activity activity = this.cordova.getActivity();
 	InputMethodManager imm = (InputMethodManager)activity.getSystemService(Context.INPUT_METHOD_SERVICE);
 
@@ -32,6 +40,76 @@ public class Keyboard extends CordovaPlugin {
 	    imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
 	    callbackContext.success();
 	    return true;
+	} else if("init".equals(action)) {
+		// https://github.com/driftyco/ionic-plugin-keyboard/blob/master/src/android/IonicKeyboard.java
+		cordova.getThreadPool().execute(new Runnable() {
+			@Override
+			public void run() {
+				DisplayMetrics dm = new DisplayMetrics();
+				cordova.getActivity().getWindowManager().getDefaultDisplay().getMetrics(dm);
+				final float density = dm.density;
+
+				//http://stackoverflow.com/a/4737265/1091751 detect if keyboard is showing
+				rootView = cordova.getActivity().getWindow().getDecorView().findViewById(android.R.id.content).getRootView();
+				list = new ViewTreeObserver.OnGlobalLayoutListener() {
+					int previousHeightDiff = 0;
+					@Override
+					public void onGlobalLayout() {
+						Rect r = new Rect();
+						//r will be populated with the coordinates of your view that area still visible.
+						rootView.getWindowVisibleDisplayFrame(r);
+
+						PluginResult result;
+
+						// cache properties for later use
+						int rootViewHeight = rootView.getRootView().getHeight();
+						int resultBottom = r.bottom;
+
+						// calculate screen height differently for android versions >= 21: Lollipop 5.x, Marshmallow 6.x
+						//http://stackoverflow.com/a/29257533/3642890 beware of nexus 5
+						int screenHeight;
+
+						if (Build.VERSION.SDK_INT >= 21) {
+							Display display = cordova.getActivity().getWindowManager().getDefaultDisplay();
+							Point size = new Point();
+							display.getSize(size);
+							screenHeight = size.y;
+						} else {
+							screenHeight = rootViewHeight;
+						}
+
+						int heightDiff = screenHeight - resultBottom;
+
+						int pixelHeightDiff = (int)(heightDiff / density);
+						if (pixelHeightDiff > 100 && pixelHeightDiff != previousHeightDiff) { // if more than 100 pixels, its probably a keyboard...
+							String msg = "S" + Integer.toString(pixelHeightDiff);
+							result = new PluginResult(PluginResult.Status.OK, msg);
+							result.setKeepCallback(true);
+							callbackContext.sendPluginResult(result);
+						}
+						else if ( pixelHeightDiff != previousHeightDiff && ( previousHeightDiff - pixelHeightDiff ) > 100 ){
+							String msg = "H";
+							result = new PluginResult(PluginResult.Status.OK, msg);
+							result.setKeepCallback(true);
+							callbackContext.sendPluginResult(result);
+						}
+						previousHeightDiff = pixelHeightDiff;
+					}
+				};
+
+				rootView.getViewTreeObserver().addOnGlobalLayoutListener(list);
+
+
+				PluginResult dataResult = new PluginResult(PluginResult.Status.OK);
+				dataResult.setKeepCallback(true);
+				callbackContext.sendPluginResult(dataResult);
+			}
+		});
+
+		PluginResult result = new PluginResult(PluginResult.Status.OK);
+		result.setKeepCallback(true);
+		callbackContext.sendPluginResult(result);
+		return true;
 	}
 	callbackContext.error(action + " is not a supported action");
 	return false;
