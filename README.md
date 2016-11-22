@@ -192,6 +192,7 @@ Attach handler to this event to be able to receive notification when keyboard is
 #### Supported Platforms
 
 - iOS
+- Android
 
 ## keyboardDidHide
 
@@ -209,6 +210,7 @@ Attach handler to this event to be able to receive notification when keyboard is
 #### Supported Platforms
 
 - iOS
+- Android
 
 ## keyboardWillShow
 
